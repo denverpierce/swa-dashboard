@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "strict": true,
+    "lib": [
+      "esnext"
+    ],
+    "moduleResolution": "node",
+    "module": "AMD",
+    "outFile": "index.js"
+  },
+  "compileOnSave": true,
+  "files": ["index.ts"]
+}
