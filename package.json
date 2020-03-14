@@ -24,6 +24,7 @@
     "twilio": "^2.9.2"
   },
   "devDependencies": {
-    "@types/node": "^13.9.1"
+    "@types/node": "^13.9.1",
+    "@types/osmosis": "^1.1.1"
   }
 }

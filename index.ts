@@ -71,6 +71,12 @@ const isTwilioConfigured = process.env.TWILIO_ACCOUNT_SID &&
  * Dashboard renderer
  */
 class Dashboard {
+  markers: any[];
+  widgets: object;
+  screen: any;
+  grid: any;
+  graph: any;
+  graphs: any;
 
   constructor() {
     this.markers = []
@@ -196,8 +202,10 @@ class Dashboard {
     }
 
     for (let name in widgets) {
+      // @ts-ignore
       let widget = widgets[name]
 
+      // @ts-ignore
       this.widgets[name] = this.grid.set(
         widget.size.top,
         widget.size.left,
@@ -238,6 +246,7 @@ class Dashboard {
       y: [...this.graphs.return.y, prices.return]
     })
 
+    // @ts-ignore
     this.widgets.graph.setData([
       this.graphs.outbound,
       this.graphs.return
@@ -253,18 +262,20 @@ class Dashboard {
    */
   waypoint(data) {
     this.markers.push(data)
-
+    // @ts-ignore
     if (this.blink) {
       return
     }
 
     // Blink effect
     var visible = true
-
+    // @ts-ignore
     this.blink = setInterval(() => {
       if (visible) {
+        // @ts-ignore
         this.markers.forEach((m) => this.widgets.map.addMarker(m))
       } else {
+        // @ts-ignore
         this.widgets.map.clearMarkers()
       }
 
@@ -283,6 +294,7 @@ class Dashboard {
    */
   log(messages) {
     const now = format("MM/dd/yy-hh:mm:ss", new Date())
+    // @ts-ignore
     messages.forEach((m) => this.widgets.log.log(`${now}: ${m}`))
   }
 
@@ -294,6 +306,7 @@ class Dashboard {
    * @return {Void}
    */
   settings(config) {
+    // @ts-ignore
     config.forEach((c) => this.widgets.settings.add(c))
   }
 }
@@ -336,36 +349,39 @@ const sendTextMessage = (message) => {
  * @return {Void}
  */
 const fetch = () => {
-  console.log(ttt)
-  var ttt = osmosis
+  osmosis
     .get("https://www.southwest.com")
-    .submit(".booking-form--form", {
-      twoWayTrip: true,
+    .find(".form")
+    .log(console.log)
+    .submit(".form.search-form", {
+      LandingAirBookingSearchForm_originationAirportCode: originAirport,
+      LandingAirBookingSearchForm_destinationAirportCode: destinationAirport,
+      LandingAirBookingSearchForm_fareType: "USD",
+      LandingAirBookingSearchForm_adultPassengersCount: adultPassengerCount,
       airTranRedirect: "",
       returnAirport: "RoundTrip",
       outboundTimeOfDay: "ANYTIME",
       returnTimeOfDay: "ANYTIME",
-      seniorPassengerCount: 0,
-      fareType: "DOLLARS",
-      originAirport,
-      destinationAirport,
       outboundDateString,
-      returnDateString,
-      adultPassengerCount
-    })
+      returnDateString
+    }, (a) => console.log(a), (a) => console.log(a))
+    .then((a) => console.log("aaa", a))
     .find("#faresOutbound .product_price")
     .then((priceMarkup) => {
+      console.log("b", priceMarkup)
       const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
       const price = parseInt(matches[1])
+      // @ts-ignore
       fares.outbound.push(price)
     })
     .find("#faresReturn .product_price")
     .then((priceMarkup) => {
       const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
       const price = parseInt(matches[1])
+      // @ts-ignore
       fares.return.push(price)
     })
-    .done(() => {
+    .done((a) => {
       const lowestOutboundFare = Math.min(...fares.outbound)
       const lowestReturnFare = Math.min(...fares.return)
       var faresAreValid = true
@@ -416,27 +432,27 @@ const fetch = () => {
           const message = `Deal alert! Lowest fair has hit \$${lowestOutboundFare} (outbound) and \$${lowestReturnFare} (return)`
 
           // Party time
-          dashboard.log([
-            rainbow(message)
-          ])
+          // dashboard.log([
+          //   rainbow(message)
+          // ])
 
-          if (isTwilioConfigured) {
-            sendTextMessage(message)
-          }
+          // if (isTwilioConfigured) {
+          //   sendTextMessage(message)
+          // }
         }
 
-        dashboard.log([
-          `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare, outboundFareDiffString].filter(i => i).join(" ")}`,
-          `Lowest fair for a return flight is currently \$${[lowestReturnFare, returnFareDiffString].filter(i => i).join(" ")}`
-        ])
+        // dashboard.log([
+        //   `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare, outboundFareDiffString].filter(i => i).join(" ")}`,
+        //   `Lowest fair for a return flight is currently \$${[lowestReturnFare, returnFareDiffString].filter(i => i).join(" ")}`
+        // ])
 
-        dashboard.plot({
-          outbound: lowestOutboundFare,
-          return: lowestReturnFare
-        })
+        // dashboard.plot({
+        //   outbound: lowestOutboundFare,
+        //   return: lowestReturnFare
+        // })
       }
 
-      dashboard.render()
+      //dashboard.render()
 
       setTimeout(fetch, interval * TIME_MIN)
     })
@@ -456,12 +472,18 @@ airports.forEach((airport) => {
 
 // Print settings
 dashboard.settings([
+  //@ts-ignore
   `Origin airport: ${originAirport}`,
+  //@ts-ignore
   `Destination airport: ${destinationAirport}`,
+  //@ts-ignore
   `Outbound date: ${outboundDateString}`,
+  //@ts-ignore
   `Return date: ${returnDateString}`,
+  //@ts-ignore
   `Passengers: ${adultPassengerCount}`,
   `Interval: ${pretty(interval * TIME_MIN)}`,
+  //@ts-ignore
   `Deal price: ${dealPriceThreshold ? `<= \$${dealPriceThreshold}` : "disabled"}`,
   `SMS alerts: ${isTwilioConfigured ? process.env.TWILIO_PHONE_TO : "disabled"}`
 ])

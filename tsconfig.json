@@ -5,9 +5,13 @@
     "lib": [
       "esnext"
     ],
-    "moduleResolution": "node",
-    "module": "AMD",
-    "outFile": "index.js"
+    "moduleResolution": "Node",
+    "module": "esnext",
+    "types": ["node"],
+    "noImplicitAny": false,
+    "typeRoots": ["node_modules/@types"],
+    "allowSyntheticDefaultImports": true,
+    "target": "ES6"
   },
   "compileOnSave": true,
   "files": ["index.ts"]

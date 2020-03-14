@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 "use strict";
-var osmosis = require("osmosis");
-var chalk = require("chalk");
-var rainbow = require("chalk-rainbow");
-var twilio = require("twilio");
-var blessed = require("blessed");
-var contrib = require("blessed-contrib");
-var format = require("date-format");
-var pretty = require("pretty-ms");
-var airports = require("airports");
+const osmosis = require("osmosis");
+const chalk = require("chalk");
+const rainbow = require("chalk-rainbow");
+const twilio = require("twilio");
+const blessed = require("blessed");
+const contrib = require("blessed-contrib");
+const format = require("date-format");
+const pretty = require("pretty-ms");
+const airports = require("airports");
 // Time constants
-var TIME_MS = 1;
-var TIME_SEC = TIME_MS * 1000;
-var TIME_MIN = TIME_SEC * 60;
-var TIME_HOUR = TIME_MIN * 60;
+const TIME_MS = 1;
+const TIME_SEC = TIME_MS * 1000;
+const TIME_MIN = TIME_SEC * 60;
+const TIME_HOUR = TIME_MIN * 60;
 // Fares
 var prevLowestOutboundFare;
 var prevLowestReturnFare;
-var fares = {
+const fares = {
     outbound: [],
-    "return": []
+    return: []
 };
 // Command line options
 var originAirport;
@@ -30,7 +30,7 @@ var adultPassengerCount;
 var dealPriceThreshold;
 var interval = 30; // In minutes
 // Parse command line options (no validation, sorry!)
-process.argv.forEach(function (arg, i, argv) {
+process.argv.forEach((arg, i, argv) => {
     switch (arg) {
         case "--from":
             originAirport = argv[i + 1];
@@ -56,15 +56,15 @@ process.argv.forEach(function (arg, i, argv) {
     }
 });
 // Check if Twilio env vars are set
-var isTwilioConfigured = process.env.TWILIO_ACCOUNT_SID &&
+const isTwilioConfigured = process.env.TWILIO_ACCOUNT_SID &&
     process.env.TWILIO_AUTH_TOKEN &&
     process.env.TWILIO_PHONE_FROM &&
     process.env.TWILIO_PHONE_TO;
 /**
  * Dashboard renderer
  */
-var Dashboard = /** @class */ (function () {
-    function Dashboard() {
+class Dashboard {
+    constructor() {
         this.markers = [];
         this.widgets = {};
         // Configure blessed
@@ -75,7 +75,7 @@ var Dashboard = /** @class */ (function () {
             fullUnicode: true,
             smartCSR: true
         });
-        this.screen.key(["escape", "q", "C-c"], function (ch, key) { return process.exit(0); });
+        this.screen.key(["escape", "q", "C-c"], (ch, key) => process.exit(0));
         // Grid settings
         this.grid = new contrib.grid({
             screen: this.screen,
@@ -92,7 +92,7 @@ var Dashboard = /** @class */ (function () {
                     line: "red"
                 }
             },
-            "return": {
+            return: {
                 title: "Destination/Return",
                 x: [],
                 y: [],
@@ -102,7 +102,7 @@ var Dashboard = /** @class */ (function () {
             }
         };
         // Shared settings
-        var shared = {
+        const shared = {
             border: {
                 type: "line"
             },
@@ -115,7 +115,7 @@ var Dashboard = /** @class */ (function () {
             }
         };
         // Widgets
-        var widgets = {
+        const widgets = {
             map: {
                 type: contrib.map,
                 size: {
@@ -180,8 +180,10 @@ var Dashboard = /** @class */ (function () {
                 })
             }
         };
-        for (var name in widgets) {
-            var widget = widgets[name];
+        for (let name in widgets) {
+            // @ts-ignore
+            let widget = widgets[name];
+            // @ts-ignore
             this.widgets[name] = this.grid.set(widget.size.top, widget.size.left, widget.size.height, widget.size.width, widget.type, widget.options);
         }
     }
@@ -190,9 +192,9 @@ var Dashboard = /** @class */ (function () {
      *
      * @return {Void}
      */
-    Dashboard.prototype.render = function () {
+    render() {
         this.screen.render();
-    };
+    }
     /**
      * Plot graph data
      *
@@ -200,21 +202,22 @@ var Dashboard = /** @class */ (function () {
      *
      * @return {Void}
      */
-    Dashboard.prototype.plot = function (prices) {
-        var now = format("MM/dd/yy-hh:mm:ss", new Date());
+    plot(prices) {
+        const now = format("MM/dd/yy-hh:mm:ss", new Date());
         Object.assign(this.graphs.outbound, {
-            x: this.graphs.outbound.x.concat([now]),
-            y: this.graphs.outbound.y.concat([prices.outbound])
+            x: [...this.graphs.outbound.x, now],
+            y: [...this.graphs.outbound.y, prices.outbound]
         });
-        Object.assign(this.graphs["return"], {
-            x: this.graphs["return"].x.concat([now]),
-            y: this.graphs["return"].y.concat([prices["return"]])
+        Object.assign(this.graphs.return, {
+            x: [...this.graphs.return.x, now],
+            y: [...this.graphs.return.y, prices.return]
         });
+        // @ts-ignore
         this.widgets.graph.setData([
             this.graphs.outbound,
-            this.graphs["return"]
+            this.graphs.return
         ]);
-    };
+    }
     /**
      * Add waypoint marker to map
      *
@@ -222,25 +225,28 @@ var Dashboard = /** @class */ (function () {
      *
      * @return {Void}
      */
-    Dashboard.prototype.waypoint = function (data) {
-        var _this = this;
+    waypoint(data) {
         this.markers.push(data);
+        // @ts-ignore
         if (this.blink) {
             return;
         }
         // Blink effect
         var visible = true;
-        this.blink = setInterval(function () {
+        // @ts-ignore
+        this.blink = setInterval(() => {
             if (visible) {
-                _this.markers.forEach(function (m) { return _this.widgets.map.addMarker(m); });
+                // @ts-ignore
+                this.markers.forEach((m) => this.widgets.map.addMarker(m));
             }
             else {
-                _this.widgets.map.clearMarkers();
+                // @ts-ignore
+                this.widgets.map.clearMarkers();
             }
             visible = !visible;
-            _this.render();
+            this.render();
         }, 1 * TIME_SEC);
-    };
+    }
     /**
      * Log data
      *
@@ -248,11 +254,11 @@ var Dashboard = /** @class */ (function () {
      *
      * @return {Void}
      */
-    Dashboard.prototype.log = function (messages) {
-        var _this = this;
-        var now = format("MM/dd/yy-hh:mm:ss", new Date());
-        messages.forEach(function (m) { return _this.widgets.log.log(now + ": " + m); });
-    };
+    log(messages) {
+        const now = format("MM/dd/yy-hh:mm:ss", new Date());
+        // @ts-ignore
+        messages.forEach((m) => this.widgets.log.log(`${now}: ${m}`));
+    }
     /**
      * Display settings
      *
@@ -260,13 +266,12 @@ var Dashboard = /** @class */ (function () {
      *
      * @return {Void}
      */
-    Dashboard.prototype.settings = function (config) {
-        var _this = this;
-        config.forEach(function (c) { return _this.widgets.settings.add(c); });
-    };
-    return Dashboard;
-}());
-var dashboard = new Dashboard();
+    settings(config) {
+        // @ts-ignore
+        config.forEach((c) => this.widgets.settings.add(c));
+    }
+}
+const dashboard = new Dashboard();
 /**
  * Send a text message using Twilio
  *
@@ -274,9 +279,9 @@ var dashboard = new Dashboard();
  *
  * @return {Void}
  */
-var sendTextMessage = function (message) {
+const sendTextMessage = (message) => {
     try {
-        var twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+        const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
         twilioClient.sendMessage({
             from: process.env.TWILIO_PHONE_FROM,
             to: process.env.TWILIO_PHONE_TO,
@@ -286,12 +291,12 @@ var sendTextMessage = function (message) {
                 return;
             if (err) {
                 dashboard.log([
-                    chalk.red("Error: failed to send SMS to " + process.env.TWILIO_PHONE_TO + " from " + process.env.TWILIO_PHONE_FROM)
+                    chalk.red(`Error: failed to send SMS to ${process.env.TWILIO_PHONE_TO} from ${process.env.TWILIO_PHONE_FROM}`)
                 ]);
             }
             else {
                 dashboard.log([
-                    chalk.green("Successfully sent SMS to " + process.env.TWILIO_PHONE_TO + " from " + process.env.TWILIO_PHONE_FROM)
+                    chalk.green(`Successfully sent SMS to ${process.env.TWILIO_PHONE_TO} from ${process.env.TWILIO_PHONE_FROM}`)
                 ]);
             }
         });
@@ -303,46 +308,49 @@ var sendTextMessage = function (message) {
  *
  * @return {Void}
  */
-var fetch = function () {
-    console.log(ttt);
-    var ttt = osmosis
+const fetch = () => {
+    osmosis
         .get("https://www.southwest.com")
-        .submit(".booking-form--form", {
-        twoWayTrip: true,
+        .find(".form")
+        .log(console.log)
+        .submit(".form.search-form", {
+        LandingAirBookingSearchForm_originationAirportCode: originAirport,
+        LandingAirBookingSearchForm_destinationAirportCode: destinationAirport,
+        LandingAirBookingSearchForm_fareType: "USD",
+        LandingAirBookingSearchForm_adultPassengersCount: adultPassengerCount,
         airTranRedirect: "",
         returnAirport: "RoundTrip",
         outboundTimeOfDay: "ANYTIME",
         returnTimeOfDay: "ANYTIME",
-        seniorPassengerCount: 0,
-        fareType: "DOLLARS",
-        originAirport: originAirport,
-        destinationAirport: destinationAirport,
-        outboundDateString: outboundDateString,
-        returnDateString: returnDateString,
-        adultPassengerCount: adultPassengerCount
-    })
+        outboundDateString,
+        returnDateString
+    }, (a) => console.log(a), (a) => console.log(a))
+        .then((a) => console.log("aaa", a))
         .find("#faresOutbound .product_price")
-        .then(function (priceMarkup) {
-        var matches = priceMarkup.toString().match(/\$.*?(\d+)/);
-        var price = parseInt(matches[1]);
+        .then((priceMarkup) => {
+        console.log("b", priceMarkup);
+        const matches = priceMarkup.toString().match(/\$.*?(\d+)/);
+        const price = parseInt(matches[1]);
+        // @ts-ignore
         fares.outbound.push(price);
     })
         .find("#faresReturn .product_price")
-        .then(function (priceMarkup) {
-        var matches = priceMarkup.toString().match(/\$.*?(\d+)/);
-        var price = parseInt(matches[1]);
-        fares["return"].push(price);
+        .then((priceMarkup) => {
+        const matches = priceMarkup.toString().match(/\$.*?(\d+)/);
+        const price = parseInt(matches[1]);
+        // @ts-ignore
+        fares.return.push(price);
     })
-        .done(function () {
-        var lowestOutboundFare = Math.min.apply(Math, fares.outbound);
-        var lowestReturnFare = Math.min.apply(Math, fares["return"]);
+        .done((a) => {
+        const lowestOutboundFare = Math.min(...fares.outbound);
+        const lowestReturnFare = Math.min(...fares.return);
         var faresAreValid = true;
         // Clear previous fares
         fares.outbound = [];
-        fares["return"] = [];
+        fares.return = [];
         // Get difference from previous fares
-        var outboundFareDiff = prevLowestOutboundFare - lowestOutboundFare;
-        var returnFareDiff = prevLowestReturnFare - lowestReturnFare;
+        const outboundFareDiff = prevLowestOutboundFare - lowestOutboundFare;
+        const returnFareDiff = prevLowestReturnFare - lowestReturnFare;
         var outboundFareDiffString = "";
         var returnFareDiffString = "";
         // Create a string to show the difference
@@ -352,22 +360,22 @@ var fetch = function () {
                 faresAreValid = false;
             }
             if (outboundFareDiff > 0) {
-                outboundFareDiffString = chalk.green("(down $" + Math.abs(outboundFareDiff) + ")");
+                outboundFareDiffString = chalk.green(`(down \$${Math.abs(outboundFareDiff)})`);
             }
             else if (outboundFareDiff < 0) {
-                outboundFareDiffString = chalk.red("(up $" + Math.abs(outboundFareDiff) + ")");
+                outboundFareDiffString = chalk.red(`(up \$${Math.abs(outboundFareDiff)})`);
             }
             else if (outboundFareDiff === 0) {
-                outboundFareDiffString = chalk.blue("(no change)");
+                outboundFareDiffString = chalk.blue(`(no change)`);
             }
             if (returnFareDiff > 0) {
-                returnFareDiffString = chalk.green("(down $" + Math.abs(returnFareDiff) + ")");
+                returnFareDiffString = chalk.green(`(down \$${Math.abs(returnFareDiff)})`);
             }
             else if (returnFareDiff < 0) {
-                returnFareDiffString = chalk.red("(up $" + Math.abs(returnFareDiff) + ")");
+                returnFareDiffString = chalk.red(`(up \$${Math.abs(returnFareDiff)})`);
             }
             else if (returnFareDiff === 0) {
-                returnFareDiffString = chalk.blue("(no change)");
+                returnFareDiffString = chalk.blue(`(no change)`);
             }
         }
         if (faresAreValid) {
@@ -376,30 +384,30 @@ var fetch = function () {
             prevLowestReturnFare = lowestReturnFare;
             // Do some Twilio magic (SMS alerts for awesome deals)
             if (dealPriceThreshold && (lowestOutboundFare <= dealPriceThreshold || lowestReturnFare <= dealPriceThreshold)) {
-                var message = "Deal alert! Lowest fair has hit $" + lowestOutboundFare + " (outbound) and $" + lowestReturnFare + " (return)";
+                const message = `Deal alert! Lowest fair has hit \$${lowestOutboundFare} (outbound) and \$${lowestReturnFare} (return)`;
                 // Party time
-                dashboard.log([
-                    rainbow(message)
-                ]);
-                if (isTwilioConfigured) {
-                    sendTextMessage(message);
-                }
+                // dashboard.log([
+                //   rainbow(message)
+                // ])
+                // if (isTwilioConfigured) {
+                //   sendTextMessage(message)
+                // }
             }
-            dashboard.log([
-                "Lowest fair for an outbound flight is currently $" + [lowestOutboundFare, outboundFareDiffString].filter(function (i) { return i; }).join(" "),
-                "Lowest fair for a return flight is currently $" + [lowestReturnFare, returnFareDiffString].filter(function (i) { return i; }).join(" ")
-            ]);
-            dashboard.plot({
-                outbound: lowestOutboundFare,
-                "return": lowestReturnFare
-            });
+            // dashboard.log([
+            //   `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare, outboundFareDiffString].filter(i => i).join(" ")}`,
+            //   `Lowest fair for a return flight is currently \$${[lowestReturnFare, returnFareDiffString].filter(i => i).join(" ")}`
+            // ])
+            // dashboard.plot({
+            //   outbound: lowestOutboundFare,
+            //   return: lowestReturnFare
+            // })
         }
-        dashboard.render();
+        //dashboard.render()
         setTimeout(fetch, interval * TIME_MIN);
     });
 };
 // Get lat/lon for airports (no validation on non-existent airports)
-airports.forEach(function (airport) {
+airports.forEach((airport) => {
     switch (airport.iata) {
         case originAirport:
             dashboard.waypoint({ lat: airport.lat, lon: airport.lon, color: "red", char: "X" });
@@ -411,13 +419,19 @@ airports.forEach(function (airport) {
 });
 // Print settings
 dashboard.settings([
-    "Origin airport: " + originAirport,
-    "Destination airport: " + destinationAirport,
-    "Outbound date: " + outboundDateString,
-    "Return date: " + returnDateString,
-    "Passengers: " + adultPassengerCount,
-    "Interval: " + pretty(interval * TIME_MIN),
-    "Deal price: " + (dealPriceThreshold ? "<= $" + dealPriceThreshold : "disabled"),
-    "SMS alerts: " + (isTwilioConfigured ? process.env.TWILIO_PHONE_TO : "disabled")
+    //@ts-ignore
+    `Origin airport: ${originAirport}`,
+    //@ts-ignore
+    `Destination airport: ${destinationAirport}`,
+    //@ts-ignore
+    `Outbound date: ${outboundDateString}`,
+    //@ts-ignore
+    `Return date: ${returnDateString}`,
+    //@ts-ignore
+    `Passengers: ${adultPassengerCount}`,
+    `Interval: ${pretty(interval * TIME_MIN)}`,
+    //@ts-ignore
+    `Deal price: ${dealPriceThreshold ? `<= \$${dealPriceThreshold}` : "disabled"}`,
+    `SMS alerts: ${isTwilioConfigured ? process.env.TWILIO_PHONE_TO : "disabled"}`
 ]);
 fetch();
