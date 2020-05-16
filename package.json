@@ -5,7 +5,8 @@
   "description": "Dashboard to monitor and receive alerts for changes in Southwest fare prices",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p ./tsconfig.json",
+    "prestart": "tsc -p ./tsconfig.json",
     "check": "node ./bin/index.js"
   },
   "repository": {

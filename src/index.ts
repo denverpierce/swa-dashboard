@@ -1,21 +1,16 @@
-import playwright from 'playwright';
+import playwright, { Page, ElementHandle } from 'playwright';
 import chalk from 'chalk';
-import rainbow from 'chalk-rainbow';
 import twilio from 'twilio';
-import blessed from 'blessed';
-import contrib from 'blessed-contrib';
-import format from 'date-format';
 import pretty from 'pretty-ms';
-import airports from 'airports';
 import config from '../config/config.json';
-import {dashboard} from './screen';
-import {searchSelectors, fareSelectors} from './selectors';
+import { dashboard } from './screen';
+import { searchSelectors, fareSelectors, flightSelectors } from './selectors';
 import { TIME_MIN } from './constants';
 
 // Fares
 var prevLowestOutboundFare: number;
 var prevLowestReturnFare: number;
-const fares:{outbound:number[],return:number[]} = {
+const fares: { outbound: number[], return: number[] } = {
   outbound: [],
   return: []
 }
@@ -99,10 +94,11 @@ const sendTextMessage = (message) => {
  *
  * @return {Void}
  */
-const fetch = async () => {
-  const browser = await playwright.chromium.launch({ headless: false });
+const fetch = async (resolve, reject) => {
+  const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
+
   await page.goto(config.baseUrl);
 
   const originAirportElem = await page.$(searchSelectors.originAirport);
@@ -110,8 +106,8 @@ const fetch = async () => {
   const deparureDateElem = await page.$(searchSelectors.deparureDate);
   const returnDateElem = await page.$(searchSelectors.returnDate);
 
-  if(!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem){
-    throw new Error('Selector drift, cannot continue');
+  if (!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem) {
+    process.exit()
   }
   // apply config
   await originAirportElem.fill(config.originAirport);
@@ -123,115 +119,129 @@ const fetch = async () => {
   await page.click(searchSelectors.searchSubmit);
   await page.waitForNavigation();
 
-  const firstFare = await page.$(fareSelectors.firstOutboundFare);
-  if(firstFare){
-    const firstFarePrice = await firstFare.$('.currency--symbol + span');
-    if(firstFarePrice){
-      console.log(await firstFarePrice.innerText());
-    }
+  type Flight = {
+    number: string,
+    wannaGetAway: number
   }
 
-    //   console.log("b", priceMarkup)
-    //   const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
-    //   const price = parseInt(matches[1])
-    //   // @ts-ignore
-    //   fares.outbound.push(price)
-    // })
-    // .find("#faresReturn .product_price")
-    // .then((priceMarkup) => {
-    //   const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
-    //   const price = parseInt(matches[1])
-    //   // @ts-ignore
-    //   fares.return.push(price)
-    // })
-    // .done((a) => {
-    //   const lowestOutboundFare = Math.min(...fares.outbound)
-    //   const lowestReturnFare = Math.min(...fares.return)
-    //   var faresAreValid = true
+  const flightRowProcessor = async (flight: typeof originAirportElem): Promise<Flight> => {
+    const number = await flight.$(flightSelectors.flightNumber);
+    const wannaGetAwayPrice = await flight.$(flightSelectors.farePrice);
+    if (number && wannaGetAwayPrice) {
+      return {
+        number: await number.innerText,
+        wannaGetAway: parseFloat(await wannaGetAwayPrice.innerText)
+      }
+    }
+    return {
+      number: '',
+      wannaGetAway: 1
+    }
+  }
+  const flights = await page.$$(fareSelectors.flightRows);
+  const mappedFlights = flights.filter((f) => f != null).map(flightRowProcessor);
 
-    //   // Clear previous fares
-    //   fares.outbound = []
-    //   fares.return = []
+  //   console.log("b", priceMarkup)
+  //   const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
+  //   const price = parseInt(matches[1])
+  //   // @ts-ignore
+  //   fares.outbound.push(price)
+  // })
+  // .find("#faresReturn .product_price")
+  // .then((priceMarkup) => {
+  //   const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
+  //   const price = parseInt(matches[1])
+  //   // @ts-ignore
+  //   fares.return.push(price)
+  // })
+  // .done((a) => {
+  //   const lowestOutboundFare = Math.min(...fares.outbound)
+  //   const lowestReturnFare = Math.min(...fares.return)
+  //   var faresAreValid = true
 
-    //   // Get difference from previous fares
-    //   const outboundFareDiff = prevLowestOutboundFare - lowestOutboundFare
-    //   const returnFareDiff = prevLowestReturnFare - lowestReturnFare
-    //   var outboundFareDiffString = ""
-    //   var returnFareDiffString = ""
+  //   // Clear previous fares
+  //   fares.outbound = []
+  //   fares.return = []
 
-    //   // Create a string to show the difference
-    //   if (!isNaN(outboundFareDiff) && !isNaN(returnFareDiff)) {
+  //   // Get difference from previous fares
+  //   const outboundFareDiff = prevLowestOutboundFare - lowestOutboundFare
+  //   const returnFareDiff = prevLowestReturnFare - lowestReturnFare
+  //   var outboundFareDiffString = ""
+  //   var returnFareDiffString = ""
 
-    //     // Usually this is because of a scraping error
-    //     if (!isFinite(outboundFareDiff) || !isFinite(returnFareDiff)) {
-    //       faresAreValid = false
-    //     }
+  //   // Create a string to show the difference
+  //   if (!isNaN(outboundFareDiff) && !isNaN(returnFareDiff)) {
 
-    //     if (outboundFareDiff > 0) {
-    //       outboundFareDiffString = chalk.green(`(down \$${Math.abs(outboundFareDiff)})`)
-    //     } else if (outboundFareDiff < 0) {
-    //       outboundFareDiffString = chalk.red(`(up \$${Math.abs(outboundFareDiff)})`)
-    //     } else if (outboundFareDiff === 0) {
-    //       outboundFareDiffString = chalk.blue(`(no change)`)
-    //     }
+  //     // Usually this is because of a scraping error
+  //     if (!isFinite(outboundFareDiff) || !isFinite(returnFareDiff)) {
+  //       faresAreValid = false
+  //     }
 
-    //     if (returnFareDiff > 0) {
-    //       returnFareDiffString = chalk.green(`(down \$${Math.abs(returnFareDiff)})`)
-    //     } else if (returnFareDiff < 0) {
-    //       returnFareDiffString = chalk.red(`(up \$${Math.abs(returnFareDiff)})`)
-    //     } else if (returnFareDiff === 0) {
-    //       returnFareDiffString = chalk.blue(`(no change)`)
-    //     }
-    //   }
+  //     if (outboundFareDiff > 0) {
+  //       outboundFareDiffString = chalk.green(`(down \$${Math.abs(outboundFareDiff)})`)
+  //     } else if (outboundFareDiff < 0) {
+  //       outboundFareDiffString = chalk.red(`(up \$${Math.abs(outboundFareDiff)})`)
+  //     } else if (outboundFareDiff === 0) {
+  //       outboundFareDiffString = chalk.blue(`(no change)`)
+  //     }
 
-    //   if (faresAreValid) {
+  //     if (returnFareDiff > 0) {
+  //       returnFareDiffString = chalk.green(`(down \$${Math.abs(returnFareDiff)})`)
+  //     } else if (returnFareDiff < 0) {
+  //       returnFareDiffString = chalk.red(`(up \$${Math.abs(returnFareDiff)})`)
+  //     } else if (returnFareDiff === 0) {
+  //       returnFareDiffString = chalk.blue(`(no change)`)
+  //     }
+  //   }
 
-    //     // Store current fares for next time
-    //     prevLowestOutboundFare = lowestOutboundFare
-    //     prevLowestReturnFare = lowestReturnFare
+  //   if (faresAreValid) {
 
-    //     // Do some Twilio magic (SMS alerts for awesome deals)
-    //     if (dealPriceThreshold && (lowestOutboundFare <= dealPriceThreshold || lowestReturnFare <= dealPriceThreshold)) {
-    //       const message = `Deal alert! Lowest fair has hit \$${lowestOutboundFare} (outbound) and \$${lowestReturnFare} (return)`
+  //     // Store current fares for next time
+  //     prevLowestOutboundFare = lowestOutboundFare
+  //     prevLowestReturnFare = lowestReturnFare
 
-    //       // Party time
-    //       // dashboard.log([
-    //       //   rainbow(message)
-    //       // ])
+  //     // Do some Twilio magic (SMS alerts for awesome deals)
+  //     if (dealPriceThreshold && (lowestOutboundFare <= dealPriceThreshold || lowestReturnFare <= dealPriceThreshold)) {
+  //       const message = `Deal alert! Lowest fair has hit \$${lowestOutboundFare} (outbound) and \$${lowestReturnFare} (return)`
 
-    //       // if (isTwilioConfigured) {
-    //       //   sendTextMessage(message)
-    //       // }
-    //     }
+  //       // Party time
+  //       // dashboard.log([
+  //       //   rainbow(message)
+  //       // ])
 
-    //     // dashboard.log([
-    //     //   `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare, outboundFareDiffString].filter(i => i).join(" ")}`,
-    //     //   `Lowest fair for a return flight is currently \$${[lowestReturnFare, returnFareDiffString].filter(i => i).join(" ")}`
-    //     // ])
+  //       // if (isTwilioConfigured) {
+  //       //   sendTextMessage(message)
+  //       // }
+  //     }
 
-    //     // dashboard.plot({
-    //     //   outbound: lowestOutboundFare,
-    //     //   return: lowestReturnFare
-    //     // })
-    //   }
+  //     // dashboard.log([
+  //     //   `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare, outboundFareDiffString].filter(i => i).join(" ")}`,
+  //     //   `Lowest fair for a return flight is currently \$${[lowestReturnFare, returnFareDiffString].filter(i => i).join(" ")}`
+  //     // ])
 
-    //   //dashboard.render()
+  //     // dashboard.plot({
+  //     //   outbound: lowestOutboundFare,
+  //     //   return: lowestReturnFare
+  //     // })
+  //   }
 
-    //   setTimeout(fetch, interval * TIME_MIN)
-    // })
+  //   //dashboard.render()
+
+  //   setTimeout(fetch, interval * TIME_MIN)
+  // })
 }
 
 // Get lat/lon for airports (no validation on non-existent airports)
-airports.forEach((airport) => {
-  switch (airport.iata) {
-    case originAirport:
-      dashboard.waypoint({ lat: airport.lat, lon: airport.lon, color: "red", char: "X" })
-      break
-    case destinationAirport:
-      dashboard.waypoint({ lat: airport.lat, lon: airport.lon, color: "yellow", char: "X" })
-      break
-  }
-})
+// airports.forEach((airport) => {
+//   switch (airport.iata) {
+//     case originAirport:
+//       dashboard.waypoint({ lat: airport.lat, lon: airport.lon, color: "red", char: "X" })
+//       break
+//     case destinationAirport:
+//       dashboard.waypoint({ lat: airport.lat, lon: airport.lon, color: "yellow", char: "X" })
+//       break
+//   }
+// })
 
 // Print settings
 dashboard.settings([

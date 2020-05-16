@@ -6,5 +6,15 @@ export const searchSelectors = {
   searchSubmit: '#LandingAirBookingSearchForm_submit-button'
 }
 export const fareSelectors = {
-  firstOutboundFare: '#air-booking-fares-0-1 > div.fare-button.fare-button_primary-yellow.select-detail--fare'
+  flightRows: '.air-booking-select-detail.air-booking-select-detail_min-products.air-booking-select-detail_min-duration-and-stops',
+
+}
+
+export const flightSelectors = {
+  flightNumber: '.actionable.actionable_button actionable_light.button.flight-numbers--flight-number',
+  farePrice: '.currency--symbol + span'
+}
+
+export const fareRowSelector = (rowNum: number): string => {
+  return `#air-booking-fares-0-${rowNum}`;
 }

@@ -3,12 +3,13 @@
     "allowJs": true,
     "strict": true,
     "lib": [
-      "esnext"
+      "esnext",
+      "DOM"
     ],
     "module": "commonjs",
     "moduleResolution": "node",
     "esModuleInterop": true,
-    "types": ["node"],
+    "types": ["node","Playwright"],
     "noImplicitAny": false,
     "typeRoots": ["node_modules/@types"],
     "allowSyntheticDefaultImports": true,
