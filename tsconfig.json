@@ -5,14 +5,17 @@
     "lib": [
       "esnext"
     ],
-    "moduleResolution": "Node",
-    "module": "esnext",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
     "types": ["node"],
     "noImplicitAny": false,
     "typeRoots": ["node_modules/@types"],
     "allowSyntheticDefaultImports": true,
-    "target": "ES6"
+    "target": "ES6",
+    "resolveJsonModule": true,
+    "outDir": "bin"
   },
   "compileOnSave": true,
-  "files": ["index.ts"]
+  "files": ["src/index.ts"]
 }

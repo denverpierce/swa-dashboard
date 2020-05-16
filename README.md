@@ -52,3 +52,13 @@ export TWILIO_AUTH_TOKEN=""
 export TWILIO_PHONE_FROM=""
 export TWILIO_PHONE_TO=""
 ```
+
+### Development
+
+```bash
+tsc -w
+```
+
+```bash
+npm run check
+```
