@@ -13,7 +13,7 @@
     "noImplicitAny": false,
     "typeRoots": ["node_modules/@types"],
     "allowSyntheticDefaultImports": true,
-    "target": "ES6",
+    "target": "ESNext",
     "resolveJsonModule": true,
     "outDir": "bin"
   },

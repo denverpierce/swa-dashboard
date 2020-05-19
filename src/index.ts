@@ -88,6 +88,37 @@ const sendTextMessage = (message) => {
     })
   } catch (e) { }
 }
+const serialize = function(obj) {
+  var str:string[] = [];
+  for (var p in obj)
+    if (obj.hasOwnProperty(p)) {
+      str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
+    }
+  return str.join("&");
+}
+const TRIP_DEFAULTS = {
+  int: 'HOMEQBOMAIR',
+  adultPassengersCount: 1,
+  fareType:'USD',
+  seniorPassengersCount: 0,
+  tripType: 'roundtrip',
+  departureTimeOfDay: 'ALL_DAY',
+  reset: true,
+  passengerType:'ADULT',
+  returnTimeOfDay: 'ALL_DAY'
+};
+type TripBuilder = {
+  originationAirportCode: string,
+  destinationAirportCode: string,
+  deparureDate: string,
+  returnDate: string
+}
+const tripUrlBuilder = (trip: TripBuilder): string => {
+  return serialize({
+    ...TRIP_DEFAULTS,
+    ...trip
+  })
+}
 
 /**
  * Fetch latest airline prices
@@ -95,61 +126,87 @@ const sendTextMessage = (message) => {
  * @return {Void}
  */
 const fetch = async () => {
-  const browser = await playwright.chromium.launch({ headless: true });
+  const browser = await playwright.chromium.launch({ headless: false,devtools:true });
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto(config.baseUrl);
+  setTimeout(()=>{
+    const url = config.baseUrl + tripUrlBuilder({
+      originationAirportCode: config.originAirport,
+      destinationAirportCode: config.destinationAirport,
+      deparureDate: config.departureDateString,
+      returnDate: config.returnDateString
+    });
+    console.log(url);
+    page.goto(url);
+  },5000)
 
-  const originAirportElem = await page.$(searchSelectors.originAirport);
-  const destinationAirportElem = await page.$(searchSelectors.destinationAirport);
-  const deparureDateElem = await page.$(searchSelectors.deparureDate);
-  const returnDateElem = await page.$(searchSelectors.returnDate);
+  //process.exit();
 
-  if (!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem) {
-    process.exit()
-  }
-  // apply config
-  await originAirportElem.fill(config.originAirport);
-  await destinationAirportElem.fill(config.destinationAirport);
-  await deparureDateElem.fill(config.departureDateString);
-  await returnDateElem.fill(config.returnDateString);
+  // const originAirportElem = await page.$(searchSelectors.originAirport);
+  // const destinationAirportElem = await page.$(searchSelectors.destinationAirport);
+  // const deparureDateElem = await page.$(searchSelectors.deparureDate);
+  // const returnDateElem = await page.$(searchSelectors.returnDate);
+
+  // if (!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem) {
+  //   process.exit()
+  // }
+  // // apply config
+  // await originAirportElem.fill(config.originAirport);
+  // await destinationAirportElem.fill(config.destinationAirport);
+  // await deparureDateElem.fill(config.departureDateString);
+  // await returnDateElem.fill(config.returnDateString);
+  // returnDateElem.press('Tab');
 
   // submit the search
-  await page.click(searchSelectors.searchSubmit);
-  await page.waitForNavigation();
+  //await page.click(searchSelectors.searchSubmit);
+  //await page.waitForNavigation();
 
   type Flight = {
     number: string,
     wannaGetAway: number
   }
 
-  const flightSorter = (l: Flight, r: Flight) => l.wannaGetAway > r.wannaGetAway;
+  const results = await page.$('.search-results--messages')
+  if(!results){
+    throw new Error('Couldnt find results');
+    process.exit();
+  }
+  const flightSorter = (l: Flight, r: Flight) => Number(l.wannaGetAway > r.wannaGetAway);
 
-  const flightRowProcessor = async (flight: typeof originAirportElem): Promise<Flight | undefined> => {
-    const number = await (await flight.$(flightSelectors.flightNumber))?.innerText();
-    const wannaGetAwayPrice = await (await flight.$(flightSelectors.farePrice))?.innerText();
-    if (number && wannaGetAwayPrice) {
-      return {
-        number: number,
-        wannaGetAway: parseFloat(wannaGetAwayPrice)
-      }
+  const flightRowProcessor = async (flight: typeof results): Promise<Flight> => {
+    const number = await (await flight.$(flightSelectors.flightNumber))!.innerText();
+    const wannaGetAwayPrice = await (await flight.$(flightSelectors.farePrice))!.innerText();
+    console.log(flight)
+    if (!number || !wannaGetAwayPrice) {
+      throw new Error('Null elems shouldnt be here');
+    }
+
+    return {
+      number: number,
+      wannaGetAway: parseFloat(wannaGetAwayPrice)
     }
   }
-  const departureFlights = (await page.$$(fareSelectors.departureFlights))
+  console.log('a')
+  const departureFlightsPromise = (await page.$$(fareSelectors.departureFlights))
+    .map(f => {
+      console.log(f)
+      return f
+    })
     .filter((f) => f != null)
-    .map((flightRowProcessor))
-    .sort(flightSorter) as Flight[];
+    .map((flightRowProcessor));
 
-  const returnFlights = (await page.$$(fareSelectors.departureFlights))
+  const returnFlightsPromise = (await page.$$(fareSelectors.departureFlights))
     .filter((f) => f != null)
-    .map((flightRowProcessor))
-    .sort(flightSorter) as Flight[];
+    .map(flightRowProcessor);
+
+  const returnFlights = (await Promise.all(returnFlightsPromise)).sort(flightSorter);
+  const departureFlights = (await Promise.all(departureFlightsPromise)).sort(flightSorter);
 
   const currentCheapestDeparture = departureFlights[0];
   const currentCheapestReturn = returnFlights[0];
-  fares.departure.push(currentCheapestDeparture.wannaGetAway)
-  fares.return.push(currentCheapestReturn.wannaGetAway);
+  //fares.departure.push(currentCheapestDeparture.wannaGetAway)
+  //fares.return.push(currentCheapestReturn.wannaGetAway);
 
   //   const lowestOutboundFare = Math.min(...fares.outbound)
   //   const lowestReturnFare = Math.min(...fares.return)
@@ -257,4 +314,4 @@ dashboard.settings([
   `SMS alerts: ${isTwilioConfigured ? process.env.TWILIO_PHONE_TO : "disabled"}`
 ])
 
-fetch()
+fetch().catch(()=>'ow')
