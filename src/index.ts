@@ -10,8 +10,8 @@ import { TIME_MIN } from './constants';
 // Fares
 var prevLowestOutboundFare: number;
 var prevLowestReturnFare: number;
-const fares: { outbound: number[], return: number[] } = {
-  outbound: [],
+const fares: { departure: number[], return: number[] } = {
+  departure: [],
   return: []
 }
 
@@ -94,7 +94,7 @@ const sendTextMessage = (message) => {
  *
  * @return {Void}
  */
-const fetch = async (resolve, reject) => {
+const fetch = async () => {
   const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -124,37 +124,33 @@ const fetch = async (resolve, reject) => {
     wannaGetAway: number
   }
 
-  const flightRowProcessor = async (flight: typeof originAirportElem): Promise<Flight> => {
-    const number = await flight.$(flightSelectors.flightNumber);
-    const wannaGetAwayPrice = await flight.$(flightSelectors.farePrice);
+  const flightSorter = (l: Flight, r: Flight) => l.wannaGetAway > r.wannaGetAway;
+
+  const flightRowProcessor = async (flight: typeof originAirportElem): Promise<Flight | undefined> => {
+    const number = await (await flight.$(flightSelectors.flightNumber))?.innerText();
+    const wannaGetAwayPrice = await (await flight.$(flightSelectors.farePrice))?.innerText();
     if (number && wannaGetAwayPrice) {
       return {
-        number: await number.innerText,
-        wannaGetAway: parseFloat(await wannaGetAwayPrice.innerText)
+        number: number,
+        wannaGetAway: parseFloat(wannaGetAwayPrice)
       }
     }
-    return {
-      number: '',
-      wannaGetAway: 1
-    }
   }
-  const flights = await page.$$(fareSelectors.flightRows);
-  const mappedFlights = flights.filter((f) => f != null).map(flightRowProcessor);
+  const departureFlights = (await page.$$(fareSelectors.departureFlights))
+    .filter((f) => f != null)
+    .map((flightRowProcessor))
+    .sort(flightSorter) as Flight[];
 
-  //   console.log("b", priceMarkup)
-  //   const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
-  //   const price = parseInt(matches[1])
-  //   // @ts-ignore
-  //   fares.outbound.push(price)
-  // })
-  // .find("#faresReturn .product_price")
-  // .then((priceMarkup) => {
-  //   const matches = priceMarkup.toString().match(/\$.*?(\d+)/)
-  //   const price = parseInt(matches[1])
-  //   // @ts-ignore
-  //   fares.return.push(price)
-  // })
-  // .done((a) => {
+  const returnFlights = (await page.$$(fareSelectors.departureFlights))
+    .filter((f) => f != null)
+    .map((flightRowProcessor))
+    .sort(flightSorter) as Flight[];
+
+  const currentCheapestDeparture = departureFlights[0];
+  const currentCheapestReturn = returnFlights[0];
+  fares.departure.push(currentCheapestDeparture.wannaGetAway)
+  fares.return.push(currentCheapestReturn.wannaGetAway);
+
   //   const lowestOutboundFare = Math.min(...fares.outbound)
   //   const lowestReturnFare = Math.min(...fares.return)
   //   var faresAreValid = true

@@ -6,8 +6,8 @@ export const searchSelectors = {
   searchSubmit: '#LandingAirBookingSearchForm_submit-button'
 }
 export const fareSelectors = {
-  flightRows: '.air-booking-select-detail.air-booking-select-detail_min-products.air-booking-select-detail_min-duration-and-stops',
-
+  departureFlights: '#air-booking-product-0 .air-booking-select-detail.air-booking-select-detail_min-products.air-booking-select-detail_min-duration-and-stops',
+  returnFlights: '#air-booking-product-0 .air-booking-select-detail.air-booking-select-detail_min-products.air-booking-select-detail_min-duration-and-stops',
 }
 
 export const flightSelectors = {
