@@ -110,7 +110,7 @@ const TRIP_DEFAULTS = {
 type TripBuilder = {
   originationAirportCode: string,
   destinationAirportCode: string,
-  deparureDate: string,
+  departureDate: string,
   returnDate: string
 }
 const tripUrlBuilder = (trip: TripBuilder): string => {
@@ -126,41 +126,48 @@ const tripUrlBuilder = (trip: TripBuilder): string => {
  * @return {Void}
  */
 const fetch = async () => {
-  const browser = await playwright.chromium.launch({ headless: false,devtools:true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const browser = await playwright.firefox.launchPersistentContext('/tmp/playwright', { headless: false,devtools:false });
+  const page = await browser.newPage();
+  await page.goto('https://www.southwest.com/',{timeout:5000});
 
-  setTimeout(()=>{
-    const url = config.baseUrl + tripUrlBuilder({
-      originationAirportCode: config.originAirport,
-      destinationAirportCode: config.destinationAirport,
-      deparureDate: config.departureDateString,
-      returnDate: config.returnDateString
-    });
-    console.log(url);
-    page.goto(url);
-  },5000)
+  // need to wait until we see the codes
+  await page.waitForSelector(searchSelectors.originAirport)
+  // setTimeout(()=>{
+  //   const url = config.baseUrl + tripUrlBuilder({
+  //     originationAirportCode: config.originAirport,
+  //     destinationAirportCode: config.destinationAirport,
+  //     departureDate: config.departureDateString,
+  //     returnDate: config.returnDateString
+  //   });
+  //   console.log(url);
+  //   page.goto(url);
+  //   // setTimeout(()=>{
+  //   //   process.exit();
+  //   // }, 20000)
+  // },5000)
 
   //process.exit();
 
-  // const originAirportElem = await page.$(searchSelectors.originAirport);
-  // const destinationAirportElem = await page.$(searchSelectors.destinationAirport);
-  // const deparureDateElem = await page.$(searchSelectors.deparureDate);
-  // const returnDateElem = await page.$(searchSelectors.returnDate);
+  const originAirportElem = await page.$(searchSelectors.originAirport);
+  const destinationAirportElem = await page.$(searchSelectors.destinationAirport);
+  const deparureDateElem = await page.$(searchSelectors.departureDate);
+  const returnDateElem = await page.$(searchSelectors.returnDate);
 
-  // if (!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem) {
-  //   process.exit()
-  // }
-  // // apply config
-  // await originAirportElem.fill(config.originAirport);
-  // await destinationAirportElem.fill(config.destinationAirport);
-  // await deparureDateElem.fill(config.departureDateString);
-  // await returnDateElem.fill(config.returnDateString);
-  // returnDateElem.press('Tab');
+  if (!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem) {
+    await page.addInitScript('alert("aaa")')
+    process.stdout.emit('aaaaaaaaaaa');
+    //process.exit()
+  }
+  // apply config
+  await originAirportElem!.fill(config.originAirport)
+  await destinationAirportElem!.fill(config.destinationAirport);
+  await deparureDateElem!.fill(config.departureDateString);
+  await returnDateElem!.fill(config.returnDateString);
+  returnDateElem!.press('Tab');
 
-  // submit the search
-  //await page.click(searchSelectors.searchSubmit);
-  //await page.waitForNavigation();
+  //submit the search
+  await page.click(searchSelectors.searchSubmit);
+  await page.waitForNavigation({waitUntil:'networkidle'});
 
   type Flight = {
     number: string,
@@ -170,7 +177,7 @@ const fetch = async () => {
   const results = await page.$('.search-results--messages')
   if(!results){
     throw new Error('Couldnt find results');
-    process.exit();
+    //process.exit();
   }
   const flightSorter = (l: Flight, r: Flight) => Number(l.wannaGetAway > r.wannaGetAway);
 

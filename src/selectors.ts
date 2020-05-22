@@ -1,7 +1,7 @@
 export const searchSelectors = {
   originAirport: '#LandingAirBookingSearchForm_originationAirportCode',
   destinationAirport: '#LandingAirBookingSearchForm_destinationAirportCode',
-  deparureDate: '#LandingAirBookingSearchForm_departureDate',
+  departureDate: '#LandingAirBookingSearchForm_departureDate',
   returnDate: '#LandingAirBookingSearchForm_returnDate',
   searchSubmit: '#LandingAirBookingSearchForm_submit-button'
 }
