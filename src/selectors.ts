@@ -6,12 +6,12 @@ export const searchSelectors = {
   searchSubmit: '#LandingAirBookingSearchForm_submit-button'
 }
 export const fareSelectors = {
-  departureFlights: '#air-booking-product-0 .air-booking-select-detail.air-booking-select-detail_min-products.air-booking-select-detail_min-duration-and-stops',
-  returnFlights: '#air-booking-product-0 .air-booking-select-detail.air-booking-select-detail_min-products.air-booking-select-detail_min-duration-and-stops',
+  departureFlights: '#air-booking-product-0 .air-booking-select-detail',
+  returnFlights: '#air-booking-product-0 .air-booking-select-detail',
 }
 
 export const flightSelectors = {
-  flightNumber: '.actionable.actionable_button actionable_light.button.flight-numbers--flight-number',
+  flightNumber: '.actionable.actionable_button.actionable_light.button.flight-numbers--flight-number',
   farePrice: '.currency--symbol + span'
 }
 

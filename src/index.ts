@@ -16,78 +16,10 @@ const fares: { departure: number[], return: number[] } = {
 }
 
 // Command line options
-var originAirport: string;
-var destinationAirport: string;
-var outboundDateString: string;
-var returnDateString: string;
-var adultPassengerCount: string;
-var dealPriceThreshold: number;
+var dealPriceThreshold: 50;
 var interval = 30 // In minutes
 
-// Parse command line options (no validation, sorry!)
-process.argv.forEach((arg, i, argv) => {
-  switch (arg) {
-    case "--from":
-      originAirport = argv[i + 1]
-      break
-    case "--to":
-      destinationAirport = argv[i + 1]
-      break
-    case "--leave-date":
-      outboundDateString = argv[i + 1]
-      break
-    case "--return-date":
-      returnDateString = argv[i + 1]
-      break
-    case "--passengers":
-      adultPassengerCount = argv[i + 1]
-      break
-    case "--deal-price-threshold":
-      dealPriceThreshold = parseInt(argv[i + 1])
-      break
-    case "--interval":
-      interval = parseFloat(argv[i + 1])
-      break
-  }
-})
 
-// Check if Twilio env vars are set
-const isTwilioConfigured = process.env.TWILIO_ACCOUNT_SID &&
-  process.env.TWILIO_AUTH_TOKEN &&
-  process.env.TWILIO_PHONE_FROM &&
-  process.env.TWILIO_PHONE_TO
-
-
-
-/**
- * Send a text message using Twilio
- *
- * @param {Str} message
- *
- * @return {Void}
- */
-const sendTextMessage = (message) => {
-  try {
-    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-
-    twilioClient.sendMessage({
-      from: process.env.TWILIO_PHONE_FROM,
-      to: process.env.TWILIO_PHONE_TO,
-      body: message
-    }, function (err, data) {
-      if (!dashboard) return
-      if (err) {
-        dashboard.log([
-          chalk.red(`Error: failed to send SMS to ${process.env.TWILIO_PHONE_TO} from ${process.env.TWILIO_PHONE_FROM}`)
-        ])
-      } else {
-        dashboard.log([
-          chalk.green(`Successfully sent SMS to ${process.env.TWILIO_PHONE_TO} from ${process.env.TWILIO_PHONE_FROM}`)
-        ])
-      }
-    })
-  } catch (e) { }
-}
 const serialize = function (obj) {
   var str: string[] = [];
   for (var p in obj)
@@ -126,6 +58,10 @@ const tripUrlBuilder = (trip: TripBuilder): string => {
  * @return {Void}
  */
 const fetch = async () => {
+
+
+
+
   const browser = await playwright.firefox.launchPersistentContext('/tmp/playwright', { headless: false, devtools: false });
   const page = await browser.newPage();
   await page.goto('https://www.southwest.com/', { timeout: 5000 });
@@ -147,15 +83,32 @@ const fetch = async () => {
   await deparureDateElem.fill(config.departureDateString);
   await returnDateElem.fill(config.returnDateString);
 
+  dashboard.settings([
+    //@ts-ignore
+    `Origin airport: ${config.originAirport}`,
+    //@ts-ignore
+    `Destination airport: ${config.destinationAirport}`,
+    //@ts-ignore
+    `Outbound date: ${config.outboundDateString}`,
+    //@ts-ignore
+    `Return date: ${config.returnDateString}`,
+    //@ts-ignore
+    `Passengers: ${config.adultPassengerCount}`,
+    `Interval: ${pretty(interval * TIME_MIN)}`,
+    //@ts-ignore
+    `Deal price: ${dealPriceThreshold ? `<= \$${dealPriceThreshold}` : "disabled"}`
+  ])
   //submit the search and wait
   // await page.click(searchSelectors.searchSubmit);
   // await page.waitForNavigation();
   // await page.waitForSelector('.search-results--messages');
+
+  // navigate and wait for results to display
   const [response] = await Promise.all([
     page.waitForNavigation(), // The promise resolves after navigation has finished
     page.click(searchSelectors.searchSubmit), // Clicking the link will indirectly cause a navigation
     page.waitForSelector('.air-booking-select-detail')
- ]);
+  ]);
   type Flight = {
     number: string,
     wannaGetAway: number
@@ -163,31 +116,26 @@ const fetch = async () => {
 
   const results = await page.$('.search-results--messages')
   if (!results) {
-    console.log('No results');
+    console.error('No results');
     throw new Error('Couldnt find results');
   }
   const flightSorter = (l: Flight, r: Flight) => Number(l.wannaGetAway > r.wannaGetAway);
 
   const flightRowProcessor = async (flight: typeof results): Promise<Flight> => {
-    const number = await (await flight.$(flightSelectors.flightNumber))!.innerText();
-    const wannaGetAwayPrice = await (await flight.$(flightSelectors.farePrice))!.innerText();
-    console.log(flight)
-
+    const number = await (await flight.$(flightSelectors.flightNumber));
+    const wannaGetAwayPrice = await (await flight.$(flightSelectors.farePrice));
     if (!number || !wannaGetAwayPrice) {
+      console.error(await flight.innerHTML())
       throw new Error('Null elems shouldnt be here');
     }
 
     return {
-      number: number,
-      wannaGetAway: parseFloat(wannaGetAwayPrice)
+      number: (await number.innerText())!,
+      wannaGetAway: parseFloat(await (await wannaGetAwayPrice.innerText())!)
     }
   }
 
   const departureFlightsPromise = (await page.$$(fareSelectors.departureFlights))
-    .map(f => {
-      console.log(f)
-      return f
-    })
     .filter((f) => f != null)
     .map((flightRowProcessor));
 
@@ -198,86 +146,43 @@ const fetch = async () => {
   const returnFlights = (await Promise.all(returnFlightsPromise)).sort(flightSorter);
   const departureFlights = (await Promise.all(departureFlightsPromise)).sort(flightSorter);
 
+  await browser.close();
+
   const currentCheapestDeparture = departureFlights[0];
   const currentCheapestReturn = returnFlights[0];
-  //fares.departure.push(currentCheapestDeparture.wannaGetAway)
-  //fares.return.push(currentCheapestReturn.wannaGetAway);
 
-  //   const lowestOutboundFare = Math.min(...fares.outbound)
-  //   const lowestReturnFare = Math.min(...fares.return)
-  //   var faresAreValid = true
+  fares.departure.push(currentCheapestDeparture.wannaGetAway)
+  fares.return.push(currentCheapestReturn.wannaGetAway);
 
-  //   // Clear previous fares
-  //   fares.outbound = []
-  //   fares.return = []
+  // Store current fares for next time
+  const prevLowestOutboundFare = currentCheapestDeparture.wannaGetAway
+  const prevLowestReturnFare = currentCheapestReturn.wannaGetAway
 
-  //   // Get difference from previous fares
-  //   const outboundFareDiff = prevLowestOutboundFare - lowestOutboundFare
-  //   const returnFareDiff = prevLowestReturnFare - lowestReturnFare
-  //   var outboundFareDiffString = ""
-  //   var returnFareDiffString = ""
+  const lowestOutboundFare = currentCheapestDeparture.wannaGetAway;
+  const lowestReturnFare = currentCheapestReturn.wannaGetAway;
 
-  //   // Create a string to show the difference
-  //   if (!isNaN(outboundFareDiff) && !isNaN(returnFareDiff)) {
+  // Do some Twilio magic (SMS alerts for awesome deals)
+  //if (dealPriceThreshold && (lowestOutboundFare <= dealPriceThreshold || lowestReturnFare <= dealPriceThreshold)) {
+    const message = `Deal alert! Lowest fair has hit \$${lowestOutboundFare} (outbound) and \$${lowestReturnFare} (return)`
 
-  //     // Usually this is because of a scraping error
-  //     if (!isFinite(outboundFareDiff) || !isFinite(returnFareDiff)) {
-  //       faresAreValid = false
-  //     }
+    // Party time
+    dashboard.log([
+      //rainbow('good')
+    ])
+  //}
 
-  //     if (outboundFareDiff > 0) {
-  //       outboundFareDiffString = chalk.green(`(down \$${Math.abs(outboundFareDiff)})`)
-  //     } else if (outboundFareDiff < 0) {
-  //       outboundFareDiffString = chalk.red(`(up \$${Math.abs(outboundFareDiff)})`)
-  //     } else if (outboundFareDiff === 0) {
-  //       outboundFareDiffString = chalk.blue(`(no change)`)
-  //     }
+  dashboard.log([
+    `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare].filter(i => i).join(" ")}`,
+    `Lowest fair for a return flight is currently \$${[lowestReturnFare].filter(i => i).join(" ")}`
+  ])
 
-  //     if (returnFareDiff > 0) {
-  //       returnFareDiffString = chalk.green(`(down \$${Math.abs(returnFareDiff)})`)
-  //     } else if (returnFareDiff < 0) {
-  //       returnFareDiffString = chalk.red(`(up \$${Math.abs(returnFareDiff)})`)
-  //     } else if (returnFareDiff === 0) {
-  //       returnFareDiffString = chalk.blue(`(no change)`)
-  //     }
-  //   }
-
-  //   if (faresAreValid) {
-
-  //     // Store current fares for next time
-  //     prevLowestOutboundFare = lowestOutboundFare
-  //     prevLowestReturnFare = lowestReturnFare
-
-  //     // Do some Twilio magic (SMS alerts for awesome deals)
-  //     if (dealPriceThreshold && (lowestOutboundFare <= dealPriceThreshold || lowestReturnFare <= dealPriceThreshold)) {
-  //       const message = `Deal alert! Lowest fair has hit \$${lowestOutboundFare} (outbound) and \$${lowestReturnFare} (return)`
-
-  //       // Party time
-  //       // dashboard.log([
-  //       //   rainbow(message)
-  //       // ])
-
-  //       // if (isTwilioConfigured) {
-  //       //   sendTextMessage(message)
-  //       // }
-  //     }
-
-  //     // dashboard.log([
-  //     //   `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare, outboundFareDiffString].filter(i => i).join(" ")}`,
-  //     //   `Lowest fair for a return flight is currently \$${[lowestReturnFare, returnFareDiffString].filter(i => i).join(" ")}`
-  //     // ])
-
-  //     // dashboard.plot({
-  //     //   outbound: lowestOutboundFare,
-  //     //   return: lowestReturnFare
-  //     // })
-  //   }
-
-  //   //dashboard.render()
-
-  //   setTimeout(fetch, interval * TIME_MIN)
-  // })
+  dashboard.plot({
+    outbound: lowestOutboundFare,
+    return: lowestReturnFare
+  })
+  dashboard.render()
 }
+
 
 // Get lat/lon for airports (no validation on non-existent airports)
 // airports.forEach((airport) => {
@@ -292,21 +197,6 @@ const fetch = async () => {
 // })
 
 // Print settings
-dashboard.settings([
-  //@ts-ignore
-  `Origin airport: ${originAirport}`,
-  //@ts-ignore
-  `Destination airport: ${destinationAirport}`,
-  //@ts-ignore
-  `Outbound date: ${outboundDateString}`,
-  //@ts-ignore
-  `Return date: ${returnDateString}`,
-  //@ts-ignore
-  `Passengers: ${adultPassengerCount}`,
-  `Interval: ${pretty(interval * TIME_MIN)}`,
-  //@ts-ignore
-  `Deal price: ${dealPriceThreshold ? `<= \$${dealPriceThreshold}` : "disabled"}`,
-  `SMS alerts: ${isTwilioConfigured ? process.env.TWILIO_PHONE_TO : "disabled"}`
-])
 
-fetch().catch(() => 'ow')
+
+fetch().catch(()=>process.exit())

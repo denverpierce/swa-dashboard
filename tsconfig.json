@@ -9,13 +9,14 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "esModuleInterop": true,
-    "types": ["node","Playwright"],
+    "types": ["node","playwright"],
     "noImplicitAny": false,
     "typeRoots": ["node_modules/@types"],
     "allowSyntheticDefaultImports": true,
     "target": "ESNext",
     "resolveJsonModule": true,
-    "outDir": "bin"
+    "outDir": "bin",
+    "sourceMap": true
   },
   "compileOnSave": true,
   "files": ["src/index.ts"]

@@ -160,6 +160,7 @@ class Dashboard {
    * @return {Void}
    */
   render() {
+    console.error('made it')
     this.screen.render()
   }
 
