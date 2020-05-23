@@ -88,8 +88,8 @@ const sendTextMessage = (message) => {
     })
   } catch (e) { }
 }
-const serialize = function(obj) {
-  var str:string[] = [];
+const serialize = function (obj) {
+  var str: string[] = [];
   for (var p in obj)
     if (obj.hasOwnProperty(p)) {
       str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
@@ -99,12 +99,12 @@ const serialize = function(obj) {
 const TRIP_DEFAULTS = {
   int: 'HOMEQBOMAIR',
   adultPassengersCount: 1,
-  fareType:'USD',
+  fareType: 'USD',
   seniorPassengersCount: 0,
   tripType: 'roundtrip',
   departureTimeOfDay: 'ALL_DAY',
   reset: true,
-  passengerType:'ADULT',
+  passengerType: 'ADULT',
   returnTimeOfDay: 'ALL_DAY'
 };
 type TripBuilder = {
@@ -126,27 +126,12 @@ const tripUrlBuilder = (trip: TripBuilder): string => {
  * @return {Void}
  */
 const fetch = async () => {
-  const browser = await playwright.firefox.launchPersistentContext('/tmp/playwright', { headless: false,devtools:false });
+  const browser = await playwright.firefox.launchPersistentContext('/tmp/playwright', { headless: false, devtools: false });
   const page = await browser.newPage();
-  await page.goto('https://www.southwest.com/',{timeout:5000});
+  await page.goto('https://www.southwest.com/', { timeout: 5000 });
 
   // need to wait until we see the codes
   await page.waitForSelector(searchSelectors.originAirport)
-  // setTimeout(()=>{
-  //   const url = config.baseUrl + tripUrlBuilder({
-  //     originationAirportCode: config.originAirport,
-  //     destinationAirportCode: config.destinationAirport,
-  //     departureDate: config.departureDateString,
-  //     returnDate: config.returnDateString
-  //   });
-  //   console.log(url);
-  //   page.goto(url);
-  //   // setTimeout(()=>{
-  //   //   process.exit();
-  //   // }, 20000)
-  // },5000)
-
-  //process.exit();
 
   const originAirportElem = await page.$(searchSelectors.originAirport);
   const destinationAirportElem = await page.$(searchSelectors.destinationAirport);
@@ -154,30 +139,32 @@ const fetch = async () => {
   const returnDateElem = await page.$(searchSelectors.returnDate);
 
   if (!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem) {
-    await page.addInitScript('alert("aaa")')
-    process.stdout.emit('aaaaaaaaaaa');
-    //process.exit()
+    process.exit()
   }
   // apply config
-  await originAirportElem!.fill(config.originAirport)
-  await destinationAirportElem!.fill(config.destinationAirport);
-  await deparureDateElem!.fill(config.departureDateString);
-  await returnDateElem!.fill(config.returnDateString);
-  returnDateElem!.press('Tab');
+  await originAirportElem.fill(config.originAirport)
+  await destinationAirportElem.fill(config.destinationAirport);
+  await deparureDateElem.fill(config.departureDateString);
+  await returnDateElem.fill(config.returnDateString);
 
-  //submit the search
-  await page.click(searchSelectors.searchSubmit);
-  await page.waitForNavigation({waitUntil:'networkidle'});
-
+  //submit the search and wait
+  // await page.click(searchSelectors.searchSubmit);
+  // await page.waitForNavigation();
+  // await page.waitForSelector('.search-results--messages');
+  const [response] = await Promise.all([
+    page.waitForNavigation(), // The promise resolves after navigation has finished
+    page.click(searchSelectors.searchSubmit), // Clicking the link will indirectly cause a navigation
+    page.waitForSelector('.air-booking-select-detail')
+ ]);
   type Flight = {
     number: string,
     wannaGetAway: number
   }
 
   const results = await page.$('.search-results--messages')
-  if(!results){
+  if (!results) {
+    console.log('No results');
     throw new Error('Couldnt find results');
-    //process.exit();
   }
   const flightSorter = (l: Flight, r: Flight) => Number(l.wannaGetAway > r.wannaGetAway);
 
@@ -185,6 +172,7 @@ const fetch = async () => {
     const number = await (await flight.$(flightSelectors.flightNumber))!.innerText();
     const wannaGetAwayPrice = await (await flight.$(flightSelectors.farePrice))!.innerText();
     console.log(flight)
+
     if (!number || !wannaGetAwayPrice) {
       throw new Error('Null elems shouldnt be here');
     }
@@ -194,7 +182,7 @@ const fetch = async () => {
       wannaGetAway: parseFloat(wannaGetAwayPrice)
     }
   }
-  console.log('a')
+
   const departureFlightsPromise = (await page.$$(fareSelectors.departureFlights))
     .map(f => {
       console.log(f)
@@ -321,4 +309,4 @@ dashboard.settings([
   `SMS alerts: ${isTwilioConfigured ? process.env.TWILIO_PHONE_TO : "disabled"}`
 ])
 
-fetch().catch(()=>'ow')
+fetch().catch(() => 'ow')
