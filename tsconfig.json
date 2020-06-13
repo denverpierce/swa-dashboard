@@ -16,7 +16,7 @@
     "target": "ESNext",
     "resolveJsonModule": true,
     "outDir": "bin",
-    "sourceMap": true
+    "sourceMap": true,
   },
   "compileOnSave": true,
   "files": ["src/index.ts"]

@@ -1,4 +1,4 @@
-import playwright, { Page, ElementHandle } from 'playwright';
+import playwright from 'playwright';
 import chalk from 'chalk';
 import twilio from 'twilio';
 import pretty from 'pretty-ms';
@@ -58,11 +58,8 @@ const tripUrlBuilder = (trip: TripBuilder): string => {
  * @return {Void}
  */
 const fetch = async () => {
-
-
-
-
-  const browser = await playwright.firefox.launchPersistentContext('/tmp/playwright', { headless: false, devtools: false });
+  // const browser = await playwright.firefox.launchPersistentContext('/tmp/playwright', { headless: false });
+  const browser = await playwright.firefox.launch({ headless: false });
   const page = await browser.newPage();
   await page.goto('https://www.southwest.com/', { timeout: 5000 });
 
@@ -75,27 +72,27 @@ const fetch = async () => {
   const returnDateElem = await page.$(searchSelectors.returnDate);
 
   if (!originAirportElem || !destinationAirportElem || !deparureDateElem || !returnDateElem) {
-    process.exit()
+    console.error('Couldn\'t find entry elems')
+    throw new Error('Couldn\'t find entry elems')
   }
   // apply config
-  await originAirportElem.fill(config.originAirport)
+  await originAirportElem.fill(config.originAirport);
   await destinationAirportElem.fill(config.destinationAirport);
   await deparureDateElem.fill(config.departureDateString);
   await returnDateElem.fill(config.returnDateString);
 
+  // the date picker obscures the submit button, so need to send some keys
+  // to dismiss it
+  await returnDateElem.press('Tab');
+  await (await page.$(searchSelectors.passengerCount))!.press('Tab');
+
   dashboard.settings([
-    //@ts-ignore
     `Origin airport: ${config.originAirport}`,
-    //@ts-ignore
     `Destination airport: ${config.destinationAirport}`,
-    //@ts-ignore
-    `Outbound date: ${config.outboundDateString}`,
-    //@ts-ignore
+    `Outbound date: ${config.departureDateString}`,
     `Return date: ${config.returnDateString}`,
-    //@ts-ignore
-    `Passengers: ${config.adultPassengerCount}`,
+    `Passengers: ${config.passengerCount}`,
     `Interval: ${pretty(interval * TIME_MIN)}`,
-    //@ts-ignore
     `Deal price: ${dealPriceThreshold ? `<= \$${dealPriceThreshold}` : "disabled"}`
   ])
   //submit the search and wait
@@ -104,7 +101,7 @@ const fetch = async () => {
   // await page.waitForSelector('.search-results--messages');
 
   // navigate and wait for results to display
-  const [response] = await Promise.all([
+  const [_response] = await Promise.all([
     page.waitForNavigation(), // The promise resolves after navigation has finished
     page.click(searchSelectors.searchSubmit), // Clicking the link will indirectly cause a navigation
     page.waitForSelector('.air-booking-select-detail')
