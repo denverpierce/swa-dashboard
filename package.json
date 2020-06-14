@@ -11,6 +11,8 @@
     "check": "node ./bin/index.js"
   },
   "dependencies": {
+    "fp-ts": "^2.6.5",
+    "io-ts": "^2.2.4",
     "playwright": "^1.1.1",
     "typescript": "^3.9.2"
   },

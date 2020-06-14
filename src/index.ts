@@ -1,6 +1,9 @@
 import playwright from 'playwright';
 import config from '../config/config.json';
 import { searchSelectors, fareSelectors, flightSelectors } from './selectors';
+import * as io from 'io-ts';
+import { Either, fold } from 'fp-ts/es6/Either';
+import { pipe } from 'fp-ts/es6/pipeable';
 
 type Flight = {
   number: string,
@@ -20,10 +23,17 @@ const fares: {
   cheapestDestinationFlights: []
 };
 
+const ioApiData = io.partial({
+  notfications: io.partial({
+    formErrors: io.array(io.partial({
+      code: io.string
+    }))
+  })
+})
+
 // Command line options
 const DEAL_PRICE_THRESHOLD = 30; // price in dollars
 const INTERVAL = 120; // will be converted to minutes
-
 
 /**
  * Fetch latest airline prices
@@ -60,14 +70,36 @@ const fetchCurrentPrices = async (): Promise<typeof fares> => {
   await (await page.$(searchSelectors.passengerCount))!.press('Tab');
 
   // navigate and wait for results to display
-  const [_response] = await Promise.all([
+  const [_1, _2, _3, apiReturn] = await Promise.all([
     page.waitForNavigation(), // The promise resolves after navigation has finished
     page.click(searchSelectors.searchSubmit), // Clicking the link will indirectly cause a navigation
-    page.waitForSelector('.air-booking-select-detail')
+    page.waitForSelector('.air-booking-select-detail'),
+    page.waitForResponse(config.shopApiUrl)
   ]);
 
-  const results = await page.$('.search-results--messages')
+  const results = await page.$('.search-results--messages');
   if (!results) {
+    const shopReturn = await apiReturn.json();
+    return pipe(
+      ioApiData.decode(shopReturn),
+      fold(
+        (l) => console.error(l),
+        (parsedShop) => {
+        // wtb lens
+        if (parsedShop.notfications) {
+          if (parsedShop.notfications.formErrors) {
+            if (parsedShop.notfications.formErrors) {
+              const ferr = parsedShop.notfications.formErrors;
+              const hasFlights = ferr.findIndex((e) => e.code === 'ERROR__NO_FLIGHTS_AVAILABLE') >= 0;
+              if(!hasFlights){
+                return []
+              }
+            }
+          }
+        }
+      })
+    )
+
     console.error('No results');
     throw new Error('Couldnt find results');
   }
