@@ -1,0 +1,22 @@
+
+> swa-dashboard@1.0.0 check /home/denver/Documents/swa-dashboard
+> node ./bin/index.js
+
+[ { number: '# 2154 / 147\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 1844\n Opens flyout.', wannaGetAway: 569 },
+  { number: '# 2366\n Opens flyout.', wannaGetAway: 569 },
+  { number: '# 1016\n Opens flyout.', wannaGetAway: 569 },
+  { number: '# 2503\n Opens flyout.', wannaGetAway: 569 },
+  { number: '# 251\n Opens flyout.', wannaGetAway: 569 },
+  { number: '# 473\n Opens flyout.', wannaGetAway: 574 },
+  { number: '# 4 / 1281\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 2183\n Opens flyout.', wannaGetAway: 574 },
+  { number: '# 2111 / 1262\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 557 / 2446\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 2690\n Opens flyout.', wannaGetAway: 574 },
+  { number: '# 9 / 1064\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 2344 / 1283\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 2324 / 2254\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 2290 / 2171\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 41 / 2246\n Opens flyout.', wannaGetAway: 579 },
+  { number: '# 575 / 713\n Opens flyout.', wannaGetAway: 579 } ]

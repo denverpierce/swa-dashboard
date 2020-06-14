@@ -1,71 +1,43 @@
 import playwright from 'playwright';
-import chalk from 'chalk';
-import twilio from 'twilio';
-import pretty from 'pretty-ms';
 import config from '../config/config.json';
-import { dashboard } from './screen';
 import { searchSelectors, fareSelectors, flightSelectors } from './selectors';
-import { TIME_MIN } from './constants';
+
+type Flight = {
+  number: string,
+  price: number,
+  fetchTime: string
+}
 
 // Fares
-var prevLowestOutboundFare: number;
-var prevLowestReturnFare: number;
-const fares: { departure: number[], return: number[] } = {
-  departure: [],
-  return: []
-}
+let prevLowestOutboundFare: number = 999999;
+let prevLowestReturnFare: number = 999999;
+
+const fares: {
+  cheapestOriginFlights: Flight[],
+  cheapestDestinationFlights: Flight[]
+} = {
+  cheapestOriginFlights: [],
+  cheapestDestinationFlights: []
+};
 
 // Command line options
-var dealPriceThreshold: 50;
-var interval = 30 // In minutes
+const DEAL_PRICE_THRESHOLD = 30; // price in dollars
+const INTERVAL = 120; // will be converted to minutes
 
-
-const serialize = function (obj) {
-  var str: string[] = [];
-  for (var p in obj)
-    if (obj.hasOwnProperty(p)) {
-      str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
-    }
-  return str.join("&");
-}
-const TRIP_DEFAULTS = {
-  int: 'HOMEQBOMAIR',
-  adultPassengersCount: 1,
-  fareType: 'USD',
-  seniorPassengersCount: 0,
-  tripType: 'roundtrip',
-  departureTimeOfDay: 'ALL_DAY',
-  reset: true,
-  passengerType: 'ADULT',
-  returnTimeOfDay: 'ALL_DAY'
-};
-type TripBuilder = {
-  originationAirportCode: string,
-  destinationAirportCode: string,
-  departureDate: string,
-  returnDate: string
-}
-const tripUrlBuilder = (trip: TripBuilder): string => {
-  return serialize({
-    ...TRIP_DEFAULTS,
-    ...trip
-  })
-}
 
 /**
  * Fetch latest airline prices
  *
  * @return {Void}
  */
-const fetch = async () => {
+const fetchCurrentPrices = async (): Promise<typeof fares> => {
   // const browser = await playwright.firefox.launchPersistentContext('/tmp/playwright', { headless: false });
   const browser = await playwright.firefox.launch({ headless: false });
   const page = await browser.newPage();
-  await page.goto('https://www.southwest.com/', { timeout: 5000 });
+  await page.goto(config.baseUrl, { timeout: 5000 });
 
   // need to wait until we see the codes
-  await page.waitForSelector(searchSelectors.originAirport)
-
+  await page.waitForSelector(searchSelectors.originAirport);
   const originAirportElem = await page.$(searchSelectors.originAirport);
   const destinationAirportElem = await page.$(searchSelectors.destinationAirport);
   const deparureDateElem = await page.$(searchSelectors.departureDate);
@@ -75,6 +47,7 @@ const fetch = async () => {
     console.error('Couldn\'t find entry elems')
     throw new Error('Couldn\'t find entry elems')
   }
+
   // apply config
   await originAirportElem.fill(config.originAirport);
   await destinationAirportElem.fill(config.destinationAirport);
@@ -86,37 +59,19 @@ const fetch = async () => {
   await returnDateElem.press('Tab');
   await (await page.$(searchSelectors.passengerCount))!.press('Tab');
 
-  dashboard.settings([
-    `Origin airport: ${config.originAirport}`,
-    `Destination airport: ${config.destinationAirport}`,
-    `Outbound date: ${config.departureDateString}`,
-    `Return date: ${config.returnDateString}`,
-    `Passengers: ${config.passengerCount}`,
-    `Interval: ${pretty(interval * TIME_MIN)}`,
-    `Deal price: ${dealPriceThreshold ? `<= \$${dealPriceThreshold}` : "disabled"}`
-  ])
-  //submit the search and wait
-  // await page.click(searchSelectors.searchSubmit);
-  // await page.waitForNavigation();
-  // await page.waitForSelector('.search-results--messages');
-
   // navigate and wait for results to display
   const [_response] = await Promise.all([
     page.waitForNavigation(), // The promise resolves after navigation has finished
     page.click(searchSelectors.searchSubmit), // Clicking the link will indirectly cause a navigation
     page.waitForSelector('.air-booking-select-detail')
   ]);
-  type Flight = {
-    number: string,
-    wannaGetAway: number
-  }
 
   const results = await page.$('.search-results--messages')
   if (!results) {
     console.error('No results');
     throw new Error('Couldnt find results');
   }
-  const flightSorter = (l: Flight, r: Flight) => Number(l.wannaGetAway > r.wannaGetAway);
+  const flightSorter = (l: Flight, r: Flight) => Number(l.price > r.price);
 
   const flightRowProcessor = async (flight: typeof results): Promise<Flight> => {
     const number = await (await flight.$(flightSelectors.flightNumber));
@@ -128,7 +83,8 @@ const fetch = async () => {
 
     return {
       number: (await number.innerText())!,
-      wannaGetAway: parseFloat(await (await wannaGetAwayPrice.innerText())!)
+      price: parseFloat(await (await wannaGetAwayPrice.innerText())!),
+      fetchTime: new Date().toISOString()
     }
   }
 
@@ -136,7 +92,7 @@ const fetch = async () => {
     .filter((f) => f != null)
     .map((flightRowProcessor));
 
-  const returnFlightsPromise = (await page.$$(fareSelectors.departureFlights))
+  const returnFlightsPromise = (await page.$$(fareSelectors.returnFlights))
     .filter((f) => f != null)
     .map(flightRowProcessor);
 
@@ -148,52 +104,31 @@ const fetch = async () => {
   const currentCheapestDeparture = departureFlights[0];
   const currentCheapestReturn = returnFlights[0];
 
-  fares.departure.push(currentCheapestDeparture.wannaGetAway)
-  fares.return.push(currentCheapestReturn.wannaGetAway);
+  fares.cheapestOriginFlights.push(currentCheapestDeparture);
+  fares.cheapestDestinationFlights.push(currentCheapestReturn);
 
   // Store current fares for next time
-  const prevLowestOutboundFare = currentCheapestDeparture.wannaGetAway
-  const prevLowestReturnFare = currentCheapestReturn.wannaGetAway
+  if (prevLowestOutboundFare - currentCheapestDeparture.price >= DEAL_PRICE_THRESHOLD) {
+    prevLowestOutboundFare = currentCheapestDeparture.price
+  }
+  if (prevLowestReturnFare - currentCheapestReturn.price >= DEAL_PRICE_THRESHOLD) {
+    prevLowestReturnFare = currentCheapestReturn.price;
+  }
 
-  const lowestOutboundFare = currentCheapestDeparture.wannaGetAway;
-  const lowestReturnFare = currentCheapestReturn.wannaGetAway;
-
-  // Do some Twilio magic (SMS alerts for awesome deals)
-  //if (dealPriceThreshold && (lowestOutboundFare <= dealPriceThreshold || lowestReturnFare <= dealPriceThreshold)) {
-    const message = `Deal alert! Lowest fair has hit \$${lowestOutboundFare} (outbound) and \$${lowestReturnFare} (return)`
-
-    // Party time
-    dashboard.log([
-      //rainbow('good')
-    ])
-  //}
-
-  dashboard.log([
-    `Lowest fair for an outbound flight is currently \$${[lowestOutboundFare].filter(i => i).join(" ")}`,
-    `Lowest fair for a return flight is currently \$${[lowestReturnFare].filter(i => i).join(" ")}`
-  ])
-
-  dashboard.plot({
-    outbound: lowestOutboundFare,
-    return: lowestReturnFare
-  })
-  dashboard.render()
+  console.log(JSON.stringify(fares))
+  return fares;
 }
 
+const fail = (reason: any) => {
+  console.error(reason);
+  throw new Error(reason);
+}
 
-// Get lat/lon for airports (no validation on non-existent airports)
-// airports.forEach((airport) => {
-//   switch (airport.iata) {
-//     case originAirport:
-//       dashboard.waypoint({ lat: airport.lat, lon: airport.lon, color: "red", char: "X" })
-//       break
-//     case destinationAirport:
-//       dashboard.waypoint({ lat: airport.lat, lon: airport.lon, color: "yellow", char: "X" })
-//       break
-//   }
-// })
+// fire it once before letting interval take over
+fetchCurrentPrices()
+  .catch(fail);
 
-// Print settings
-
-
-fetch().catch(()=>process.exit())
+setInterval(() => {
+  fetchCurrentPrices()
+    .catch(fail);
+}, (60 * 1000 * INTERVAL))
