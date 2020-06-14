@@ -7,9 +7,10 @@
       "DOM"
     ],
     "module": "commonjs",
-    "moduleResolution": "node",
+    "declaration": true,
+    "moduleResolution": "Node",
     "esModuleInterop": true,
-    "types": ["node","playwright"],
+    "types": ["node","playwright", "DOM"],
     "noImplicitAny": false,
     "typeRoots": ["node_modules/@types"],
     "allowSyntheticDefaultImports": true,

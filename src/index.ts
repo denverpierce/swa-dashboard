@@ -2,8 +2,8 @@ import playwright from 'playwright';
 import config from '../config/config.json';
 import { searchSelectors, fareSelectors, flightSelectors } from './selectors';
 import * as io from 'io-ts';
-import { Either, fold } from 'fp-ts/es6/Either';
-import { pipe } from 'fp-ts/es6/pipeable';
+import { Either, fold } from 'fp-ts/lib/Either';
+import { pipe } from 'fp-ts/lib/pipeable';
 
 type Flight = {
   number: string,
@@ -70,85 +70,95 @@ const fetchCurrentPrices = async (): Promise<typeof fares> => {
   await (await page.$(searchSelectors.passengerCount))!.press('Tab');
 
   // navigate and wait for results to display
-  const [_1, _2, _3, apiReturn] = await Promise.all([
+  let [apiReturn, _1, _2, _3] = await Promise.all([
+    page.waitForResponse(/shopping$/, { timeout: 7000 }),
     page.waitForNavigation(), // The promise resolves after navigation has finished
     page.click(searchSelectors.searchSubmit), // Clicking the link will indirectly cause a navigation
-    page.waitForSelector('.air-booking-select-detail'),
-    page.waitForResponse(config.shopApiUrl)
-  ]);
+    page.waitForSelector('.air-booking-select-detail')
+  ]).catch(() => {
+    return [null, null, null, null];
+  });
 
-  const results = await page.$('.search-results--messages');
-  if (!results) {
+  if (apiReturn && apiReturn.status() === 403) {
+    console.error('made it')
     const shopReturn = await apiReturn.json();
-    return pipe(
+    const a = pipe(
       ioApiData.decode(shopReturn),
       fold(
         (l) => console.error(l),
         (parsedShop) => {
-        // wtb lens
-        if (parsedShop.notfications) {
-          if (parsedShop.notfications.formErrors) {
+          // wtb lens
+          if (parsedShop.notfications) {
             if (parsedShop.notfications.formErrors) {
-              const ferr = parsedShop.notfications.formErrors;
-              const hasFlights = ferr.findIndex((e) => e.code === 'ERROR__NO_FLIGHTS_AVAILABLE') >= 0;
-              if(!hasFlights){
-                return []
+              if (parsedShop.notfications.formErrors) {
+                const ferr = parsedShop.notfications.formErrors;
+                const hasFlights = ferr.findIndex((e) => e.code === 'ERROR__NO_FLIGHTS_AVAILABLE') >= 0;
+                if (!hasFlights) {
+                  return false;
+                }
               }
             }
           }
-        }
-      })
+          throw new Error('Couldn\'t parse return data')
+        })
     )
 
     console.error('No results');
     throw new Error('Couldnt find results');
-  }
-  const flightSorter = (l: Flight, r: Flight) => Number(l.price > r.price);
+  } else {
+    const results = await page.$('.search-results--messages');
+    const flightSorter = (l: Flight, r: Flight) => Number(l.price > r.price);
 
-  const flightRowProcessor = async (flight: typeof results): Promise<Flight> => {
-    const number = await (await flight.$(flightSelectors.flightNumber));
-    const wannaGetAwayPrice = await (await flight.$(flightSelectors.farePrice));
-    if (!number || !wannaGetAwayPrice) {
-      console.error(await flight.innerHTML())
-      throw new Error('Null elems shouldnt be here');
+    const flightRowProcessor = async (flight: typeof results): Promise<Flight> => {
+      if (!flight) { throw new Error('Null elems shouldnt be here'); }
+      const number = await (await flight.$(flightSelectors.flightNumber));
+      const farePrice = await (await flight.$(flightSelectors.farePrice));
+
+      if (!number || !farePrice) {
+        throw new Error('Null elems shouldnt be here');
+      }
+
+      return {
+        number: (await number.innerText())!,
+        price: parseFloat(await (await farePrice.innerText())!),
+        fetchTime: new Date().toISOString()
+      }
     }
 
-    return {
-      number: (await number.innerText())!,
-      price: parseFloat(await (await wannaGetAwayPrice.innerText())!),
-      fetchTime: new Date().toISOString()
+    const departureFlightsPromise = (await page.$$(fareSelectors.departureFlights))
+      .filter((f) => f != null)
+      .map((flightRowProcessor));
+
+    const returnFlightsPromise = (await page.$$(fareSelectors.returnFlights))
+      .filter((f) => f != null)
+      .map(flightRowProcessor);
+
+    const returnFlights = (await Promise.all(returnFlightsPromise)).sort(flightSorter);
+    const departureFlights = (await Promise.all(departureFlightsPromise)).sort(flightSorter);
+
+    if (returnFlights.length === 0 || departureFlights.length === 0) {
+      return fares;
     }
+
+    await browser.close();
+
+    const currentCheapestDeparture = departureFlights[0];
+    const currentCheapestReturn = returnFlights[0];
+
+    fares.cheapestOriginFlights.push(currentCheapestDeparture);
+    fares.cheapestDestinationFlights.push(currentCheapestReturn);
+
+    // Store current fares for next time
+    if (prevLowestOutboundFare - currentCheapestDeparture.price >= DEAL_PRICE_THRESHOLD) {
+      prevLowestOutboundFare = currentCheapestDeparture.price
+    }
+    if (prevLowestReturnFare - currentCheapestReturn.price >= DEAL_PRICE_THRESHOLD) {
+      prevLowestReturnFare = currentCheapestReturn.price;
+    }
+
+    console.log(JSON.stringify(fares))
+    return fares;
   }
-
-  const departureFlightsPromise = (await page.$$(fareSelectors.departureFlights))
-    .filter((f) => f != null)
-    .map((flightRowProcessor));
-
-  const returnFlightsPromise = (await page.$$(fareSelectors.returnFlights))
-    .filter((f) => f != null)
-    .map(flightRowProcessor);
-
-  const returnFlights = (await Promise.all(returnFlightsPromise)).sort(flightSorter);
-  const departureFlights = (await Promise.all(departureFlightsPromise)).sort(flightSorter);
-
-  await browser.close();
-
-  const currentCheapestDeparture = departureFlights[0];
-  const currentCheapestReturn = returnFlights[0];
-
-  fares.cheapestOriginFlights.push(currentCheapestDeparture);
-  fares.cheapestDestinationFlights.push(currentCheapestReturn);
-
-  // Store current fares for next time
-  if (prevLowestOutboundFare - currentCheapestDeparture.price >= DEAL_PRICE_THRESHOLD) {
-    prevLowestOutboundFare = currentCheapestDeparture.price
-  }
-  if (prevLowestReturnFare - currentCheapestReturn.price >= DEAL_PRICE_THRESHOLD) {
-    prevLowestReturnFare = currentCheapestReturn.price;
-  }
-
-  console.log(JSON.stringify(fares))
-  return fares;
 }
 
 const fail = (reason: any) => {
